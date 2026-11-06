@@ -23,6 +23,21 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Generate Icon Automatically
+      run: |
+        python -c "
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.new('RGBA', (256, 256), color=(33, 150, 243, 255))
+        d = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype('arial.bd.ttf', 120)
+            d.text((85, 50), 'D', fill=(255, 255, 255, 255), font=font)
+        except:
+            pass
+        img.save('icon.ico', format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
+        print('Icon generated successfully!')
+        "
+
     - name: Build with PyInstaller
       run: |
         pyinstaller --noconsole --onefile --icon=icon.ico --name="SmartDocOrganizer" app.py
