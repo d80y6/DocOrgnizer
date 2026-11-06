@@ -1,0 +1,6 @@
+pypdf
+python-docx
+openpyxl
+Pillow
+pytesseract
+pyinstaller
