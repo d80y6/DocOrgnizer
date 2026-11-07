@@ -3,4 +3,5 @@ python-docx
 openpyxl
 Pillow
 pytesseract
+google-genai
 pyinstaller
