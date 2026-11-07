@@ -83,6 +83,8 @@ def classify_with_gemini_fully_dynamic(content_text, api_key):
             return "مواضيع_عامة/" + result
         return result
     except Exception as e:
+        # ⚠️ هنا التعديل: سنقوم بإرجاع وصف الخطأ أو طباعته لنعرف السبب الحقيقي
+        print(f"Gemini API Error: {e}")
         return "أخرى/ملفات_غير_مفروزة"
 
 class DocumentOrganizerApp:
