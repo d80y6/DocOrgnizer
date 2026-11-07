@@ -15,7 +15,6 @@ from google import genai
 CONFIG_FILE = "settings.json"
 
 def load_settings():
-    """تحميل الإعدادات المحفوظة مسبقاً (مفتاح الـ API والمسارات)"""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -25,14 +24,12 @@ def load_settings():
     return {"api_key": "", "source_dir": "", "target_dir": ""}
 
 def save_settings(settings_data):
-    """حفظ الإعدادات محلياً"""
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(settings_data, f, ensure_ascii=False, indent=4)
+            json.dump(settings_data, f, ensure_ascii=False, indent+4 if 'indent+4' in globals() else 4)
     except:
         pass
 
-# استخراج النص من المستندات والصور
 def extract_text(file_path):
     ext = file_path.suffix.lower()
     text = ""
@@ -58,36 +55,43 @@ def extract_text(file_path):
     except Exception as e:
         pass
     
-    return (file_path.name + "\n" + text)[:2500]
+    return (file_path.name + "\n" + text)[:3000]
 
-# التصنيف عبر Gemini AI
-def classify_with_gemini(content_text, api_key):
+# التصنيف الذكي الحر (Gemini يقترح التصنيف من تلقاء نفسه بالكامل)
+def classify_with_gemini_fully_dynamic(content_text, api_key):
     try:
         client = genai.Client(api_key=api_key)
         prompt = f"""
-        لديك نص مستخرج من ملف. مهمتك هي تصنيفه إلى مجلد رئيسي ومجلد فرعي بهذا الشكل بدقة: (المجلد_الرئيسي/المجلد_الفرعي).
-        أمثلة: المالية/الفواتير، العمل/العقود، الشخصية/الشهادات، العمل/التقارير، الشخصية/الهويات.
-        أجب بصيغة المسار فقط بدون أي مقدمات أو شرح إضافي (مثال: المالية/الفواتير). إذا لم تتعرف عليه، ضعها تحت: أخرى/ملفات_عامة
+        أنت مساعد ذكي لتنظيم الملفات والوثائق. مهمتك قراءة النص أو اسم الملف أدناه، واستنتاج واقتراح مسار مجلد رئيسي ومجلد فرعي مناسب جداً من تفكيرك الخاص (بالصيغة التالية: المجلد_الرئيسي/المجلد_الفرعي).
+        
+        شروط هامة:
+        1. لا تتقيد بأي قوائم قديمة، ابتكر تصنيفات دقيقة واحترافية باللغة العربية (أو الإنجليزية إذا كان الملف تقنياً بحتاً وتفضّل ذلك)، مثل: (الأمن_السيبراني/التحقيق_الجنائى)، (الشبكات/تقارير_DNS)، (الكتب_والأبحاث/تقنية)، (الصور/لقطات_شاشة)، (المالية/الفواتير)، وغيرها بحسب طبيعة المحتوى.
+        2. استخدم الشرطة السفلية (_) بدلاً من المسافات في أسماء المجلدات لكي تكون متوافقة مع أنظمة الملفات.
+        3. أجب بصيغة المسار فقط (المجلد_الرئيسي/المجلد_الفرعي) بدون أي مقدمات، رموز تزيينية، أو شرح إضافي نهائياً.
 
-        نص المستند:
+        محتوى المستند أو اسم الملف:
         {content_text}
         """
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
         )
-        return response.text.strip().replace("'", "").replace('"', "")
+        # تنظيف النتيجة لضمان الحصول على مسار نظيف فقط
+        result = response.text.strip().replace("'", "").replace('"', "").replace("`", "")
+        # التأكد من أنه مسار صالح
+        if "/" not in result and "\\" not in result:
+            return "مواضيع_عامة/" + result
+        return result
     except Exception as e:
         return "أخرى/ملفات_غير_مفروزة"
 
 class DocumentOrganizerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("منظم المستندات الذكي (Gemini AI + حفظ الإعدادات)")
+        self.root.title("منظم المستندات الذكي (استنتاج حر للتصنيفات عبر Gemini)")
         self.root.geometry("700x650")
         self.root.config(bg="#f0f0f0")
         
-        # تحميل الإعدادات المحفوظة
         self.settings = load_settings()
 
         self.source_dir = tk.StringVar(value=self.settings.get("source_dir", ""))
@@ -95,54 +99,48 @@ class DocumentOrganizerApp:
         self.api_key_var = tk.StringVar(value=self.settings.get("api_key", ""))
         self.dry_run_var = tk.BooleanVar(value=True)
         
-        self.is_running = False # للتحكم في الإيقاف
+        self.is_running = False
 
         self.create_widgets()
 
     def create_widgets(self):
-        title_label = tk.Label(self.root, text="منظم الوثائق الذكي بالذكاء الاصطناعي (Gemini)", font=("Arial", 14, "bold"), bg="#f0f0f0", fg="#1a73e8")
+        title_label = tk.Label(self.root, text="منظم الوثائق (استنتاج حر للتصنيفات بالذكاء الاصطناعي)", font=("Arial", 13, "bold"), bg="#f0f0f0", fg="#1a73e8")
         title_label.pack(pady=12)
 
-        # مفتاح API
         key_frame = tk.Frame(self.root, bg="#f0f0f0")
         key_frame.pack(fill="x", padx=20, pady=5)
         tk.Label(key_frame, text="Gemini API Key:", width=18, anchor="e", bg="#f0f0f0", font=("Arial", 9, "bold")).pack(side="right", padx=5)
         tk.Entry(key_frame, textvariable=self.api_key_var, width=48, show="*").pack(side="right", padx=5)
 
-        # مجلد المصدر
         src_frame = tk.Frame(self.root, bg="#f0f0f0")
         src_frame.pack(fill="x", padx=20, pady=5)
         tk.Label(src_frame, text="مجلد الملفات:", width=18, anchor="e", bg="#f0f0f0").pack(side="right", padx=5)
         tk.Entry(src_frame, textvariable=self.source_dir, width=48).pack(side="right", padx=5)
         tk.Button(src_frame, text="استعراض...", command=self.browse_source, bg="#ddd").pack(side="right")
 
-        # مجلد الوجهة
         tgt_frame = tk.Frame(self.root, bg="#f0f0f0")
         tgt_frame.pack(fill="x", padx=20, pady=5)
         tk.Label(tgt_frame, text="مجلد الحفظ:", width=18, anchor="e", bg="#f0f0f0").pack(side="right", padx=5)
         tk.Entry(tgt_frame, textvariable=self.target_dir, width=48).pack(side="right", padx=5)
         tk.Button(tgt_frame, text="استعراض...", command=self.browse_target, bg="#ddd").pack(side="right")
 
-        # خيارات إضافية (Dry Run)
         opt_frame = tk.Frame(self.root, bg="#f0f0f0")
         opt_frame.pack(fill="x", padx=20, pady=8)
-        chk_dry = tk.Checkbutton(opt_frame, text="تشغيل تجريبي (Dry Run) - محاكاة آمنة", variable=self.dry_run_var, bg="#f0f0f0", font=("Arial", 10, "bold"), fg="#d32f2f")
+        chk_dry = tk.Checkbutton(opt_frame, text="تشغيل تجريبي (Dry Run) - معاينة الهيكل المستنتج", variable=self.dry_run_var, bg="#f0f0f0", font=("Arial", 10, "bold"), fg="#d32f2f")
         chk_dry.pack(side="right", padx=5)
 
-        # أزرار التشغيل والإيقاف
         btn_frame = tk.Frame(self.root, bg="#f0f0f0")
         btn_frame.pack(pady=10)
 
-        self.start_btn = tk.Button(btn_frame, text="ابدأ التصنيف الذكي", command=self.start_thread, bg="#1a73e8", fg="white", font=("Arial", 11, "bold"), width=20, height=2)
+        self.start_btn = tk.Button(btn_frame, text="ابدأ الاستنتاج والتنظيم الذكي", command=self.start_thread, bg="#1a73e8", fg="white", font=("Arial", 11, "bold"), width=22, height=2)
         self.start_btn.pack(side="right", padx=5)
 
         self.stop_btn = tk.Button(btn_frame, text="إيقاف العملية", command=self.stop_process, bg="#d32f2f", fg="white", font=("Arial", 11, "bold"), width=15, height=2, state=tk.DISABLED)
         self.stop_btn.pack(side="right", padx=5)
 
-        # صندوق السجل (Log)
         self.log_area = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, width=82, height=12, font=("Courier", 9))
         self.log_area.pack(padx=20, pady=5)
-        self.log_area.insert(tk.END, "جاهز للعمل... تم استرجاع الإعدادات المحفوظة إن وجدت.\n")
+        self.log_area.insert(tk.END, "جاهز للعمل... سيقوم Gemini باستنتاج التصنيفات من تلقاء نفسه لكل ملف.\n")
 
     def browse_source(self):
         dir_path = filedialog.askdirectory()
@@ -171,14 +169,13 @@ class DocumentOrganizerApp:
             messagebox.showerror("خطأ", "الرجاء إدخال مفتاح Gemini API Key!")
             return
             
-        # حفظ الإعدادات تلقائياً عند البدء
         save_settings({"api_key": api_key, "source_dir": src, "target_dir": tgt})
 
         self.is_running = True
         self.start_btn.config(state=tk.DISABLED, bg="#9e9e9e")
         self.stop_btn.config(state=tk.NORMAL)
         
-        threading.Thread(target=self.run_organization, args=(src, tgt, api_key, is_dry_run), daemon=True).start()
+        threading.Thread(target=self.run_organization, args=(src, tgt, api_key, is_dry_run), daemon=Thread if 'Thread' in globals() else daemon=True).start() if 'daemon' in locals() else threading.Thread(target=self.run_organization, args=(src, tgt, api_key, is_dry_run), daemon=True).start()
 
     def stop_process(self):
         self.is_running = False
@@ -186,7 +183,7 @@ class DocumentOrganizerApp:
 
     def run_organization(self, source_dir, target_base_dir, api_key, is_dry_run):
         mode_text = "[وضع تجريبي - Dry Run]" if is_dry_run else "[وضع حقيقي]"
-        self.log(f"--- بدأ التصنيف الذكي عبر Gemini {mode_text} ---")
+        self.log(f"--- بدأ الاستنتاج الذكي الحر عبر Gemini {mode_text} ---")
         
         source_path = Path(source_dir)
         base_target = Path(target_base_dir)
@@ -198,52 +195,47 @@ class DocumentOrganizerApp:
 
         for file_path in source_path.glob('**/*.*'):
             if not self.is_running:
-                break # إيقاف العملية فوراً إذا ضغط المستخدم زر الإيقاف
+                break
 
             if file_path.suffix.lower() in supported_extensions:
-                self.log(f"فحص وتحليل: {file_path.name}")
+                self.log(f"قراءة وتحليل: {file_path.name}")
                 
                 content_text = extract_text(file_path)
-                category = classify_with_gemini(content_text, api_key)
+                # استنتاج التصنيف بشكل حر كلياً بواسطة الذكاء الاصطناعي
+                category = classify_with_gemini_fully_dynamic(content_text, api_key)
                 
-                if "خطأ" in category:
-                    fail_count += 1
-                    self.log(f"   ❌ فشل في التصنيف أو الاتصال.")
-                    continue
-
-                self.log(f"   🤖 التصنيف المقترح: {category}")
+                self.log(f"   🧠 التصنيف المستنتج: {category}")
                 
                 destination_folder = base_target / category
                 target_file_path = destination_folder / file_path.name
                 
                 if is_dry_run:
-                    self.log(f"   (محاكاة) سيتم نقله إلى ← {category}")
+                    self.log(f"   (محاكاة) سيتم إنشاؤه ونقله إلى ← {category}")
                     success_count += 1
                     categories_stats[category] = categories_stats.get(category, 0) + 1
                 else:
                     destination_folder.mkdir(parents=True, exist_ok=True)
                     try:
                         shutil.move(str(file_path), str(target_file_path))
-                        self.log(f"   ✅ تم النقل بنجاح إلى ← {category}")
+                        self.log(f"   ✨ تم النقل بنجاح إلى ← {category}")
                         success_count += 1
                         categories_stats[category] = categories_stats.get(category, 0) + 1
                     except Exception as e:
                         fail_count += 1
                         self.log(f"   ❌ خطأ أثناء النقل: {e}")
                     
-        # تقرير الإحصائيات النهائي
-        self.log("\n--- 📊 تقرير النتائج النهائي ---")
-        self.log(f"• الملفات المعالجة بنجاح: {success_count}")
+        self.log("\n--- 📊 تقرير الهيكل التنظيمي المستنتج ---")
+        self.log(f"• إجمالي الملفات المعالجة: {success_count}")
         self.log(f"• الملفات التي فشلت: {fail_count}")
-        self.log("• التوزيع حسب المجلدات:")
+        self.log("• هيكل المجلدات التي تم استنتاجها:")
         for cat, count in categories_stats.items():
-            self.log(f"   - {cat}: {count} ملفات")
+            self.log(f"   📁 {cat} ({count} ملفات)")
             
         self.start_btn.config(state=tk.NORMAL, bg="#1a73e8")
         self.stop_btn.config(state=tk.DISABLED)
         self.is_running = False
         
-        messagebox.showinfo("تم", f"تم الانتهاء بنجاح!\nتمت معالجة {success_count} ملف.")
+        messagebox.showinfo("تم", f"تم استنتأج الهيكل التنظيمي ومعالجة {success_count} ملف بنجاح!")
 
 if __name__ == "__main__":
     root = tk.Tk()
